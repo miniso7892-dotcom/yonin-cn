@@ -37,7 +37,7 @@
   if (typeof DecompressionStream !== "undefined") {
     try {
       // 下载 pack/*.gz，进度条前半段算下载
-      const sizes = [11559551, 87199, 5229850], total = sizes.reduce((a, b) => a + b, 0), got = [0, 0, 0];
+      const sizes = [11548994, 87199, 5229850], total = sizes.reduce((a, b) => a + b, 0), got = [0, 0, 0];
       urls = await Promise.all(names.map(async (n, i) => {
         const res = await fetch("pack/" + n + ".gz");
         if (!res.ok) throw new Error(res.status + " " + n);
