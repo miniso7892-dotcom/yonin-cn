@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#000000">
+<title>这个家里只住着4个人（汉化版）</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; touch-action: none; }
+  #wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  /* 原版 960x600，按比例缩放到窗口内 */
+  #unity-canvas { width: min(100vw, 160vh); height: min(100vh, 62.5vw); background: #000; display: block; }
+  #bar { position: absolute; left: 50%; top: 50%; width: 240px; height: 6px; margin: -3px 0 0 -120px; background: #333; }
+  #bar > div { width: 0; height: 100%; background: #ccc; }
+  #msg, #rotate { color: #bbb; font: 15px/1.8 system-ui, sans-serif; text-align: center; padding: 0 16px; }
+  #msg { position: absolute; left: 0; right: 0; top: 50%; margin-top: 24px; }
+  #rotate { display: none; position: fixed; inset: 0; background: #000; z-index: 9;
+            align-items: center; justify-content: center; font-size: 17px; }
+  @media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="unity-canvas" tabindex="-1"></canvas></div>
+<div id="bar"><div></div></div>
+<div id="msg">正在下载游戏数据（约 17 MB）…</div>
+<div id="rotate"><div>请把手机横过来玩<br><small>（竖屏画面太小，看不清）</small></div></div>
+<script src="Build/webgl.loader.js"></script>
+<script>
+(async () => {
+  const bar = document.getElementById("bar"), msg = document.getElementById("msg");
+  const fail = t => { msg.style.color = "#e88"; msg.textContent = t; };
+  const setBar = p => { bar.firstElementChild.style.width = 100 * p + "%"; };
+  const names = ["webgl.data", "webgl.framework.js", "webgl.wasm"];
+  const types = ["application/octet-stream", "text/javascript", "application/wasm"];
+  let urls = names.map(n => "Build/" + n);
+  if (typeof DecompressionStream !== "undefined") {
+    try {
+      // 下载 pack/*.gz，进度条前半段算下载
+      const sizes = [11559551, 87199, 5229850], total = sizes.reduce((a, b) => a + b, 0), got = [0, 0, 0];
+      urls = await Promise.all(names.map(async (n, i) => {
+        const res = await fetch("pack/" + n + ".gz");
+        if (!res.ok) throw new Error(res.status + " " + n);
+        const buf = await new Response(res.body.pipeThrough(new TransformStream({ transform(chunk, c) {
+          got[i] += chunk.length; setBar(0.5 * got.reduce((a, b) => a + b, 0) / total); c.enqueue(chunk);
+        } }))).blob();
+        // 万一服务器已经替浏览器解过压（没有 gzip 文件头），就直接用
+        const magic = new Uint8Array(await buf.slice(0, 2).arrayBuffer());
+        const raw = magic[0] === 0x1f && magic[1] === 0x8b
+          ? await new Response(buf.stream().pipeThrough(new DecompressionStream("gzip"))).blob()
+          : buf;
+        return URL.createObjectURL(new Blob([raw], { type: types[i] }));
+      }));
+    } catch (e) {
+      console.warn("压缩包加载失败，改用未压缩文件", e);
+      urls = names.map(n => "Build/" + n);
+    }
+  }
+  msg.textContent = "";
+  createUnityInstance(document.getElementById("unity-canvas"), {
+    dataUrl: urls[0],
+    frameworkUrl: urls[1],
+    codeUrl: urls[2],
+    streamingAssetsUrl: "StreamingAssets",
+    companyName: "empty",
+    productName: "empty",
+    productVersion: "0",
+    cacheControl: () => "no-store",
+  }, p => setBar(urls[0].startsWith("blob:") ? 0.5 + 0.5 * p : p))
+    .then(() => { bar.remove(); msg.remove(); })
+    .catch(e => fail("启动失败：" + e));
+})();
+</script>
+</body>
+</html>
